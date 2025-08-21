@@ -1,0 +1,10 @@
+venv/
+*.pyc
+__pycache__/
+.env
+.env.local
+token.pickle
+credentials.json
+static/audio/*.mp3
+data/*.json
+*.log
