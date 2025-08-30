@@ -941,8 +941,8 @@ class TwilioAIReceptionist:
         )
         self.twilio_phone = ConfigManager.get('TWILIO_PHONE_NUMBER')
         
-        self.speech_timeout = ConfigManager.get_int('SPEECH_TIMEOUT', 4)
-        self.gather_timeout = ConfigManager.get_int('GATHER_TIMEOUT', 8)
+        self.speech_timeout = ConfigManager.get_int('SPEECH_TIMEOUT', 1)
+        self.gather_timeout = ConfigManager.get_int('GATHER_TIMEOUT', 3)
         
         self.data_store = DataStore()
         self.calendar_manager = None
@@ -1288,8 +1288,8 @@ class TwilioAIReceptionist:
                     input='speech',
                     action='/webhook/gather',
                     method='POST',
-                    speechTimeout=4,
-                    timeout=8,
+                    speechTimeout=1,
+                    timeout=3,
                     language='en-US'
                 )
                 gather.play(self.greeting_audio_url)
@@ -1349,8 +1349,8 @@ class TwilioAIReceptionist:
                     input='speech',
                     action='/webhook/final_check',
                     method='POST',
-                    speechTimeout=3,
-                    timeout=5,
+                    speechTimeout=1,
+                    timeout=3,
                     language='en-US'
                 )
                 gather.say("Is there anything else I can help you with?", voice='alice')
