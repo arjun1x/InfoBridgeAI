@@ -960,9 +960,6 @@ class TwilioAIReceptionist:
         self.business_config = BusinessConfig.from_env()
         
         self.app = Flask(__name__)
-        @self.app.route('/')
-        def index():
-            return "The app is running"
         print(f"Registered routes: {self.app.url_map}")
         self.setup_logging()
         
@@ -2179,9 +2176,5 @@ if __name__ == '__main__' or __name__ == 'main':
         traceback.print_exc()
         sys.exit(1)
 else:
-    receptionist = TwilioAIReceptionist()
-    app = receptionist.app
-
-if __name__ != '__main__':
     receptionist = TwilioAIReceptionist()
     app = receptionist.app
