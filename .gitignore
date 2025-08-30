@@ -1,10 +1,27 @@
+# Virtual environments
+ai-receptionist-server/
 venv/
-*.pyc
-__pycache__/
+env/
 .env
-.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.Python
+
+# Test files (optional - you may want to keep some)
+test*.py
+app[0-9]*.py
+
+# Folders
+heroku/
+phone2/
+quickstart/
+
+# Misc
+*.log
+*.pid
+appointments.json
 token.pickle
 credentials.json
-static/audio/*.mp3
-data/*.json
-*.log

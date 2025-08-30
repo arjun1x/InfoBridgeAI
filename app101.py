@@ -1881,6 +1881,7 @@ CRITICAL RULES:
 5. Never ask for information you already have (shown above)
 6. Keep responses brief (40-80 words) and conversational
 7. Use contractions (I'll, we've, that's, you're)
+8. Be easy with the transitions and make it as human as possible
 
 Remember: You're Sarah, not a computer. Speak warmly and naturally, as if you already know the information."""
         
@@ -2012,7 +2013,9 @@ Remember: You're Sarah, not a computer. Speak warmly and naturally, as if you al
         else:
             return "Everything's collected! Confirm their appointment with enthusiasm - 'Perfect! I have you scheduled for...'"
     
-    def run(self, host: str = '0.0.0.0', port: int = 5000, debug: bool = False):
+    def run(self, host: str = '0.0.0.0', port: int = None, debug: bool = False):
+        if port is None:
+            port = int(os.environ.get("PORT", 5000))
         print("\n" + "="*60)
         print("🤖 TWILIO AI RECEPTIONIST ACTIVATED")
         print("="*60)
@@ -2033,12 +2036,15 @@ Remember: You're Sarah, not a computer. Speak warmly and naturally, as if you al
         print("="*60)
         print("\n🎉 ALL SYSTEMS GO - READY FOR INCOMING CALLS! 🎉\n")
         print("="*60 + "\n")
-        
-        self.app.run(host=host, port=port, debug=debug)
 
-if __name__ == '__main__':
+        self.app.run(host=host, port=port, debug=debug, threaded=True)
+# Global app variable for gunicorn
+app = None
+
+if __name__ == '__main__' or __name__ == 'main':
     try:
         receptionist = TwilioAIReceptionist()
+        app = receptionist.app  # CRITICAL: Export Flask app for gunicorn
         
         print("\n🎭 ULTRA-HUMAN MODE ACTIVATED!")
         print("📊 Emotional Intelligence: ONLINE")
@@ -2046,10 +2052,14 @@ if __name__ == '__main__':
         print("🧠 Personality Module: LOADED")
         print("=" * 60 + "\n")
         
-        receptionist.run()
+        # Only run if executed directly
+        if __name__ == '__main__':
+            receptionist.run()  # Don't pass port - let it auto-detect
+            
     except KeyboardInterrupt:
         print("\n👋 Shutting down Twilio AI Receptionist...")
     except Exception as e:
         print(f"❌ Fatal error: {e}")
-        print(traceback.format_exc())
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
