@@ -27,6 +27,7 @@ import concurrent.futures
 from flask import Flask, request, Response, send_file, jsonify, render_template_string, has_request_context
 from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Gather, Say, Play
+from concurrent.futures import ThreadPoolExecutor,as_completed
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -72,7 +73,33 @@ class ConfigManager:
             return int(os.getenv(key, str(default)))
         except ValueError:
             return default
-
+class InstantAcknowledgments:
+    def __init__(self):
+        self.ack_sounds = {
+            'thinking': ["Mm-hmm", "I see", "Okay", "Got it","Give me a second","One Moment"],
+            'positive': ["Perfect!", "Great!", "Wonderful!", "Excellent!"],
+            'checking': ["Let me check that", "One moment", "Looking at that","Taking a look now"]
+        }
+        self.pre_generated = {}
+    
+    def get_quick_ack(self, user_input):
+        """Return instant acknowledgment based on context"""
+        text_lower = user_input.lower()
+        
+        # Name detection
+        if any(phrase in text_lower for phrase in ['my name is', "i'm", 'i am']):
+            return "Got it"
+        
+        # Date/time detection  
+        if any(word in text_lower for word in ['tomorrow', 'today', 'monday', 'tuesday', 'morning', 'afternoon']):
+            return "Perfect"
+        
+        # Service detection
+        if any(word in text_lower for word in ['cleaning', 'checkup', 'emergency', 'appointment']):
+            return "I see"
+        
+        # Default
+        return "Mm-hmm"
 @dataclass
 class Service:
     name: str
@@ -1305,7 +1332,7 @@ class TwilioAIReceptionist:
             response.say("I'm sorry, I'm having technical difficulties. Please call back.", voice='alice')
             response.hangup()
             return Response(str(response), mimetype='text/xml')
-    
+
     def handle_speech_input(self):
         try:
             call_sid = request.values.get('CallSid')
@@ -1319,32 +1346,87 @@ class TwilioAIReceptionist:
                     return self.handle_incoming_call()
             
             session.add_message('user', speech_result)
+            response = VoiceResponse()
             
-            response_text = self.process_user_input(session, speech_result)
+            # Instant acknowledgment (stays the same)
+            ack = InstantAcknowledgments()
+            quick_response = ack.get_quick_ack(speech_result)
+            if hasattr(self, 'ack_audio_urls') and quick_response in self.ack_audio_urls:
+                ack_url = self.ack_audio_urls[quick_response]
+                if ack_url:
+                    response.play(ack_url)
+            else:
+                ack_audio = self.elevenlabs_manager.generate_audio(quick_response, priority=True)
+                if ack_audio and 'localhost' not in ack_audio:
+                    response.play(ack_audio)
             
-            is_booking_complete = any(phrase in response_text for phrase in [
-                "Perfect! You're all set",
-                "Wonderful! I've successfully booked",
-                "Excellent! Your appointment is confirmed",
-                "Perfect! I've got you scheduled",
-                "Wonderful! Your",
-                "Excellent! You're all set"
-            ])
+            response.pause(length=0.1)
             
-            if is_booking_complete:
-                response = VoiceResponse()
+            # PARALLEL PROCESSING STARTS HERE
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                # Start text processing
+                future_text = executor.submit(self.process_user_input, session, speech_result)
                 
+                # Wait for text (needed to generate audio)
+                response_text = future_text.result(timeout=2.0)
+                
+                # Now start MULTIPLE parallel tasks
+                futures = {}
+                
+                # Generate main response audio
                 if self.elevenlabs_manager.enabled:
-                    audio = self.elevenlabs_manager.generate_audio(response_text, priority=True)
-                    if audio and 'localhost' not in audio:
-                        response.play(audio)
-                    else:
-                        response.say(response_text, voice='alice')
-                else:
-                    response.say(response_text, voice='alice')
+                    futures['main_audio'] = executor.submit(
+                        self.elevenlabs_manager.generate_audio, 
+                        response_text, 
+                        priority=True
+                    )
+                
+                # Check if booking is complete (while audio generates)
+                is_booking_complete = any(phrase in response_text for phrase in [
+                    "Perfect! You're all set",
+                    "Wonderful! I've successfully booked",
+                    "Excellent! Your appointment is confirmed",
+                    "Perfect! I've got you scheduled",
+                    "Wonderful! Your",
+                    "Excellent! You're all set"
+                ])
+                
+                # If booking complete, generate additional audio in parallel
+                if is_booking_complete:
+                    # Generate "anything else?" if not pre-generated
+                    if not (hasattr(self, 'pre_generated_audio') and 'ask_else' in self.pre_generated_audio):
+                        futures['ask_else'] = executor.submit(
+                            self.elevenlabs_manager.generate_audio,
+                            "Is there anything else I can help you with?",
+                            priority=True
+                        )
+                    
+                    # Generate goodbye if not pre-generated
+                    if not (hasattr(self, 'pre_generated_audio') and 'goodbye' in self.pre_generated_audio):
+                        futures['goodbye'] = executor.submit(
+                            self.elevenlabs_manager.generate_audio,
+                            "Thank you for calling! Have a great day!",
+                            priority=True
+                        )
+                
+                # Collect all results
+                results = {}
+                for key, future in futures.items():
+                    try:
+                        results[key] = future.result(timeout=1.5)
+                    except:
+                        results[key] = None
+            
+            # Now build response with pre-generated audio
+            if is_booking_complete:
+                # Play main response
+                main_audio = results.get('main_audio')
+                if main_audio and 'localhost' not in main_audio:
+                    response.play(main_audio)
                 
                 response.pause(length=2)
                 
+                # Create gather for final check
                 gather = Gather(
                     input='speech',
                     action='/webhook/final_check',
@@ -1353,24 +1435,54 @@ class TwilioAIReceptionist:
                     timeout=3,
                     language='en-US'
                 )
-                gather.say("Is there anything else I can help you with?", voice='alice')
-                response.append(gather)
                 
+                # Use pre-generated or parallel-generated audio
+                if hasattr(self, 'pre_generated_audio') and 'ask_else' in self.pre_generated_audio:
+                    gather.play(self.pre_generated_audio['ask_else'])
+                elif results.get('ask_else') and 'localhost' not in results['ask_else']:
+                    gather.play(results['ask_else'])
+                
+                response.append(gather)
                 response.pause(length=1)
-                response.say("Thank you for calling! Have a great day!", voice='alice')
+                
+                # Play goodbye
+                if hasattr(self, 'pre_generated_audio') and 'goodbye' in self.pre_generated_audio:
+                    response.play(self.pre_generated_audio['goodbye'])
+                elif results.get('goodbye') and 'localhost' not in results['goodbye']:
+                    response.play(results['goodbye'])
+                
                 response.hangup()
             else:
-                response = self.create_voice_response(response_text, use_gather=True)
+                # Not complete - continue conversation
+                gather = Gather(
+                    input='speech',
+                    action='/webhook/gather',
+                    method='POST',
+                    speechTimeout=1,
+                    timeout=3,
+                    language='en-US'
+                )
+                
+                main_audio = results.get('main_audio')
+                if main_audio and 'localhost' not in main_audio:
+                    gather.play(main_audio)
+                
+                response.append(gather)
             
             return Response(str(response), mimetype='text/xml')
             
         except Exception as e:
             self.logger.error(f"Error handling speech input: {e}")
             response = VoiceResponse()
-            response.say("Let me try that again.", voice='alice')
+            if hasattr(self, 'pre_generated_audio') and 'try_again' in self.pre_generated_audio:
+                response.play(self.pre_generated_audio['try_again'])
+            else:
+                error_audio = self.elevenlabs_manager.generate_audio("Let me try that again.", priority=True)
+                if error_audio and 'localhost' not in error_audio:
+                    response.play(error_audio)
             response.redirect('/webhook/voice', method='POST')
             return Response(str(response), mimetype='text/xml')
-    
+
     def handle_call_status(self):
         call_sid = request.values.get('CallSid')
         call_status = request.values.get('CallStatus')
