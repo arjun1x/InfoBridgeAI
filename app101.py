@@ -30,7 +30,7 @@ from twilio.twiml.voice_response import VoiceResponse, Gather, Say, Play
 from concurrent.futures import ThreadPoolExecutor,as_completed
 import google.generativeai as genai
 from dotenv import load_dotenv
-
+app = None
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 class ConfigManager:
@@ -2151,7 +2151,6 @@ Remember: You're Sarah, not a computer. Speak warmly and naturally, as if you al
 
         self.app.run(host=host, port=port, debug=debug, threaded=True)
 # Global app variable for gunicorn
-app = None
 
 if __name__ == '__main__' or __name__ == 'main':
     try:
@@ -2175,3 +2174,6 @@ if __name__ == '__main__' or __name__ == 'main':
         import traceback
         traceback.print_exc()
         sys.exit(1)
+else:
+    receptionist = TwilioAIReceptionist()
+    app = receptionist.app
