@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+<!DOCTYPE hdml PUBLIC "-//PHONE.COM//DTD HDML 2.0//EN" "http://www.phone.com/dtd/hdml20.dtd">
+<hdml version="2.0">
+  
+  <display>
+    <title>Shell Hack App</title>
+    <p>Welcom to Shell Hack!</p>
+    <br/>
+    
+    <menu>
+      <choice type="accept" key="1" task="go" dest="#home">Home</choice>
+      <choice type="accept" key="2" task="go" dest="#menu">Menu</choice>
+      <choice type="accept" key="3" task="go" dest="#info">Info</choice>
+    </menu>
+  </display>
+
+  <display id="home">
+    <title>Home</title>
+    <p>This is the home page of your HDML application.</p>
+    <br/>
+    <p>Press * to go back to main menu.</p>
+    
+    <menu>
+      <choice type="accept" key="*" task="go" dest="#main">Back</choice>
+    </menu>
+  </display>
+
+  <display id="menu">
+    <title>Menu</title>
+    <p>Available options:</p>
+    <br/>
+    <p>1. Feature One</p>
+    <p>2. Feature Two</p>
+    <p>3. Settings</p>
+    <br/>
+    
+    <menu>
+      <choice type="accept" key="1" task="go" dest="#feature1">Feature 1</choice>
+      <choice type="accept" key="2" task="go" dest="#feature2">Feature 2</choice>
+      <choice type="accept" key="3" task="go" dest="#settings">Settings</choice>
+      <choice type="accept" key="*" task="go" dest="#main">Back</choice>
+    </menu>
+  </display>
+
+  <display id="info">
+    <title>Information</title>
+    <p>Shell Hack HDML App</p>
+    <p>Version 1.0</p>
+    <br/>
+    <p>Built for handheld devices using HDML markup.</p>
+    
+    <menu>
+      <choice type="accept" key="*" task="go" dest="#main">Back</choice>
+    </menu>
+  </display>
+
+  <display id="feature1">
+    <title>Feature One</title>
+    <p>This is feature one of your application.</p>
+    <br/>
+    <p>Add your functionality here.</p>
+    
+    <menu>
+      <choice type="accept" key="*" task="go" dest="#menu">Back to Menu</choice>
+    </menu>
+  </display>
+
+  <display id="feature2">
+    <title>Feature Two</title>
+    <p>This is feature two of your application.</p>
+    <br/>
+    <p>Add your functionality here.</p>
+    
+    <menu>
+      <choice type="accept" key="*" task="go" dest="#menu">Back to Menu</choice>
+    </menu>
+  </display>
+
+  <display id="settings">
+    <title>Settings</title>
+    <p>Application settings:</p>
+    <br/>
+    <p>Configure your preferences here.</p>
+    
+    <menu>
+      <choice type="accept" key="*" task="go" dest="#menu">Back to Menu</choice>
+    </menu>
+  </display>
+
+</hdml>
