@@ -67,7 +67,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Any
-from flask import Flask, request, Response, send_file, has_request_context
+from flask import Flask, jsonify, request, Response, send_file, has_request_context
 from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Gather, Say, Play
 import logging
@@ -1149,55 +1149,56 @@ class OutboundCallManager:
         self.active_calls = {}
 
     def parse_user_objective(self, user_request: str):
-        """Basic parser placeholder (avoids NameError if called)."""
-        return (user_request or "").strip()
+        """Parse user request to extract intent."""
+        if not self.ai_model:
+            return{
+                'objective' : 'general' , 
+                'request_text': user_request,
+                'service': None,
+                'date': None,
+                'time': None
+            }
+        try:
+            prompt = f"""
+            Extract from this request:
+            1. Main objective (schedule/cancel/inquiry)
+            2. Service type if mentioned
+            3. Date/time preferences
 
+            Request: "{user_request}"
+            Return as JSON with keys: objective, service, date, time
+            """
+            response = self.ai_model.generate_content(prompt)
+            return json.loads(response.text)
+        except:
+            return{
+                'objective' : 'general' ,
+                'request_text': user_request,
+            }
     def initiate_call(self, user_request, target_number, user_id):
         """Initiate an outbound call"""
-        objective = self.parse_user_objective(user_request)
-        call = self.client.calls.create(
-            url=f"{self.base_url}/webhook/outbound_handler",
-            to=target_number,
-            from_=os.getenv('TWILIO_PHONE_NUMBER'),
-            status_callback=f"{self.base_url}/webhook/outbound_status",
-            record=True,
-            machine_detection="DetectMessageEnd",
-            send_digits=""
-        )
-        self.active_calls[call.sid] = {
-            'user_id': user_id,
-            'objective': objective,
-            'target_number': target_number,
-            'state': 'connecting',
-            'menu_navigation': [],
-            'transcript': []
-        }
-        def initiate_call(self, user_request, target_number, user_id):
-            """Initiate an outbound call"""
-            try:
-                objective = self.parse_user_objective(user_request)
-                call = self.client.calls.create(
-                    url=f"{self.base_url}/webhook/outbound_handler",
-                    to=target_number,
-                    from_=os.getenv('TWILIO_PHONE_NUMBER'),
-                    status_callback=f"{self.base_url}/webhook/outbound_status",
-                    record=True,
-                    machine_detection="DetectMessageEnd",
-                    send_digits=""
-                )
-                self.active_calls[call.sid] = {
-                    'user_id': user_id,
-                    'objective': objective,
-                    'target_number': target_number,
-                    'state': 'connecting',
-                    'menu_navigation': [],
-                    'transcript': []
-                }
-                return call.sid
-            except Exception as e:
-                print(f"Error initiating call: {e}")
-                return None
-
+        try:
+            objective = self.parse_user_objective(user_request)
+            call = self.client.calls.create(
+                url=f"{self.base_url}/webhook/outbound_handler",
+                to=target_number,
+                from_=self.twilio_phone_number,
+                status_callback=f"{self.base_url}/webhook/call_status",
+                record=True,
+                machine_detection="DetectMessageEnd"
+            )
+            self.active_calls[call.sid] = {
+                'user_id': user_id,
+                'objective': objective,
+                'request_text': user_request,
+                'target_number': target_number,
+                'state': 'initiated',
+                'transcript': []
+            }
+            return call.sid
+        except Exception as e:
+            print(f"❌ Error initiating outbound call: {e}")
+            raise e
 
 
 
@@ -1342,25 +1343,155 @@ class TwilioAIReceptionist:
         self.available_times = self.business_config.available_times
         
         # Setup routes and start background services
-        self.setup_routes()
-        self.load_appointments()
-        self._start_background_services()
-    
-    def add_service(self, name, price, duration, description, keywords=None, priority=5):
-        """Dynamically add a new service at runtime"""
-        new_service = {
-            "name": name,
-            "price": price,
-            "duration": duration,
-            "description": description,
-            "keywords": keywords or [],
-            "priority": priority
+    def initiate_outbound_call(self, target_number, user_objective, user_id):
+        """Initiate an outbound call"""
+        call_data = {
+            'user_id': user_id,
+            'objective': user_objective,
+            'target_number': target_number,
+            'state': 'connecting',
+            'ivr_path': [],
+            'transcript': [],
+            'current_menu': None
         }
-        self.business_config.services.append(new_service)
-        print(f"✅ Added new service: {name}")
-        
-        # Update service descriptions
-        self.service_descriptions = self._generate_service_descriptions()
+        try:
+            call = self.client.calls.create(
+                url=f"{self.base_url}/webhook/outbound_handler",
+                to=target_number,
+                from_=self.twilio_phone_number,
+                status_callback=f"{self.base_url}/webhook/outbound_status",
+                record=True,
+                machine_detection="DetectMessageEnd"
+            )
+        except Exception as e:
+            print(f"Error initiating outbound call: {e}")
+            return None
+
+        session = self.call_sessions.get(call.sid)
+        if not session:
+            session = CallSession(call_sid=call.sid)
+            self.call_sessions[call.sid] = session
+        session.customer_data = call_data
+        return call.sid
+
+    def parse_ivr_menu(self, audio_text, call_sid):
+        """Parse IVR menu options from audio text."""
+        audio_text = audio_text or ""
+        if getattr(self, 'logger', None):
+            self.logger.debug(f"Parsing IVR menu for call {call_sid}")
+        if not self.use_ai or not getattr(self, 'model', None):
+            return self._parse_ivr_basic(audio_text)
+
+        prompt = f"""
+        Analyze the following IVR menu audio and extract the options.
+        Audio: "{audio_text}"
+
+        Return a JSON object with the following shape:
+        {{
+            "is_menu": true/false,
+            "options": [
+                {{"digit": "1", "action": "For sales, press 1."}},
+                {{"digit": "2", "action": "For support, press 2."}}
+            ],
+            "requires_input": "none/digits/account/ssn",
+            "is_hold_message": true/false
+        }}
+        """
+        try:
+            response = self.model.generate_content(prompt)
+            parsed = json.loads(response.text)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception as exc:
+            if getattr(self, 'logger', None):
+                self.logger.debug(f"Falling back to basic IVR parsing: {exc}")
+        return self._parse_ivr_basic(audio_text)
+
+    def _parse_ivr_basic(self, audio_text):
+        """Basic IVR parsing without AI."""
+        audio_lower = (audio_text or "").lower()
+        options = []
+        patterns = [
+            (r'press (\d+) for ([\w\s]+)', 'digit_action'),
+            (r'for ([\w\s]+), press (\d+)', 'action_digit')
+        ]
+
+        for pattern, pattern_type in patterns:
+            matches = re.findall(pattern, audio_lower)
+            for match in matches:
+                if pattern_type == 'digit_action':
+                    digit, description = match
+                else:
+                    description, digit = match
+                options.append({
+                    'digit': digit.strip(),
+                    'action': description.strip()
+                })
+
+        return {
+            'is_menu': len(options) > 0,
+            'options': options,
+            'requires_input': 'digits' if options else 'none',
+            'is_hold_message': 'hold' in audio_lower or 'wait' in audio_lower
+        }
+
+    def decide_menu_option(self, menu_info, objective, call_sid):
+        """Decide which menu option to select."""
+        options = menu_info.get('options', []) if menu_info else []
+        if not options:
+            return None
+
+        if not objective:
+            session = self.call_sessions.get(call_sid)
+            if session:
+                objective = session.customer_data.get('objective', '')
+
+        objective_text = objective or ""
+        if self.use_ai and getattr(self, 'model', None):
+            prompt = f"""
+            User wants to: {objective_text}
+
+            Available menu options:
+            {json.dumps(options)}
+
+            Which option best matches the user's objective?
+            Return just the digit (1,2,3,etc.) or "0" for operator.
+            """
+            try:
+                response = self.model.generate_content(prompt)
+                if response and response.text:
+                    digit_choice = re.sub(r'\D', '', response.text)
+                    if digit_choice:
+                        return digit_choice
+            except Exception as exc:
+                if getattr(self, 'logger', None):
+                    self.logger.debug(f"AI menu selection failed, using heuristic: {exc}")
+
+        objective_lower = objective_text.lower()
+        best_match = None
+        best_score = -1
+        keywords = [
+            'billing', 'payment', 'support', 'appointment', 'schedule',
+            'cancel', 'representative', 'operator', 'agent'
+        ]
+
+        for option in options:
+            action_lower = (option.get('action') or '').lower()
+            digit = option.get('digit')
+            score = 0
+            for keyword in keywords:
+                if keyword in objective_lower and keyword in action_lower:
+                    score += 2
+                elif keyword in action_lower:
+                    score += 1
+            if score > best_score and digit:
+                best_score = score
+                best_match = digit
+
+        if best_match:
+            return best_match
+
+        return options[0].get('digit')
         
         # Update packages
         key = name.lower().replace(' ', '_')
@@ -2108,27 +2239,72 @@ class TwilioAIReceptionist:
     
     def setup_routes(self):
         """Setup Flask routes with enhanced handlers"""
-        
+        @self.app.route('/api/initiate_call', methods=['POST', 'OPTIONS'])
+        def api_initiate_call():
+            if request.method == 'OPTIONS':
+
+                return '', 200
+            try:
+                data = request.get_json()
+
+                user_request = data.get('query' , data.get('request', ''))
+                target_number = data.get('phone' , '')
+                user_id = data.get('user_id', 'web_user')
+
+                if not user_request or not target_number:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Missing "query" or "phone number" in request'
+                    }), 400
+                if not hasattr(self, ' outbound_manager'):
+                    self.outbound_manager = OutboundCallManager(
+                        self.client,
+                        self._get_base_url(),
+                        self.model if self.use_ai else None
+                    )
+                call_sid = self.outbound_manager.initiate_call(target_number, user_request, user_id)
+                return jsonify({
+                    'success': True,
+                    'call_sid': call_sid,
+                    'message' : 'Call initiated successfully'
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        @self.app.route('/api/call_status/<call_sid>', methods=['GET'])
+        def get_call_status(call_sid):
+            """Get the status of an outbound call"""
+            if not hasattr(self, 'outbound_manager'):
+                return jsonify({ 'error' : 'No active calls' }), 404
+            call_data = self.outbound_manager.active_calls.get(call_sid)
+            if not call_data:
+                return jsonify({ 'error' : 'Call not found' }), 404
+            return jsonify({
+                'success': True,
+                'state' : call_data.get('state'),
+                'transcript': call_data.get('transcript', [])
+            })
+
+
         @self.app.route('/webhook/voice', methods=['GET','POST'])
         def handle_voice_call():
-         from twilio.twiml.voice_response import VoiceResponse
-         from_number = request.values.get("From" , "")
-         vr = VoiceResponse()
+            from twilio.twiml.voice_response import VoiceResponse
+            from_number = request.values.get("From", "")
+            vr = VoiceResponse()
 
-         if self.allowed_caller and from_number != self.allowed_caller:
-             vr.say("This line is in developer testing. Please try again later." , voice = "alice")
-             vr.hangup()
-             return Response(str(vr), mimetype='text/xml')
+            if self.allowed_caller and from_number != self.allowed_caller:
+                vr.say("This line is in developer testing. Please try again later.", voice="alice")
+                vr.hangup()
+                return Response(str(vr), mimetype='text/xml')
 
-            
-            
-            
-        try:
+            try:
                 with self.perf_monitor.track('voice_webhook'):
                     print("📞 Voice webhook called!")
                     self.logger.info("Voice webhook called")
                     return self.handle_incoming_call_enhanced()
-        except Exception as e:
+            except Exception as e:
                 self.logger.error(f"Error in voice webhook: {e}\n{traceback.format_exc()}")
                 print(f"❌ Voice webhook error: {e}")
                 print(traceback.format_exc())
@@ -2136,7 +2312,7 @@ class TwilioAIReceptionist:
                 response.say("I'm sorry, I'm having technical difficulties. Please call back later.", voice='alice')
                 response.hangup()
                 return Response(str(response), mimetype='text/xml')
-        
+
         @self.app.route('/webhook/gather', methods=['POST'])
         def handle_gather():
             try:
@@ -2155,7 +2331,7 @@ class TwilioAIReceptionist:
                         response = VoiceResponse()
                         response.say("I didn't catch that. Could you please repeat?", voice='alice')
                         response.redirect('/webhook/voice', method='POST')
-                        return str(response)
+                        return Response(str(response), mimetype='text/xml')
                     
                     session = self.call_sessions[call_sid]
                     session.response_start_time = time.time()
@@ -2163,7 +2339,8 @@ class TwilioAIReceptionist:
                     print(f"🗣️ User said: '{speech_result}'")
                     self.logger.info(f"User said: '{speech_result}', State: {session.state}")
                     
-                    return self.handle_user_input_lightning(call_sid, speech_result)
+                    result = self.handle_user_input_lightning(call_sid, speech_result)
+                    return Response(result, mimetype='text/xml')
                     
             except Exception as e:
                 self.logger.error(f"Error in gather webhook: {e}\n{traceback.format_exc()}")
@@ -2171,22 +2348,23 @@ class TwilioAIReceptionist:
                 response = VoiceResponse()
                 response.say("Let me try that again.", voice='alice')
                 response.redirect('/webhook/voice', method='POST')
-                return str(response)
-        
+                return Response(str(response), mimetype='text/xml')
+
         @self.app.route('/webhook/process', methods=['GET','POST'])
         def handle_process():
             try:
                 call_sid = request.values.get('CallSid')
                 speech_result = request.values.get('SpeechResult', '')
                 print(f"Processing input in /webhook/process:'{speech_result}' for CallSid: {call_sid}")
-                return self.handle_user_input_lightning(call_sid, speech_result)
+                result = self.handle_user_input_lightning(call_sid, speech_result)
+                return Response(result, mimetype='text/xml')
             except Exception as e:
                 self.logger.error(f"Error in process webhook: {e}\n{traceback.format_exc()}")
                 response = VoiceResponse()
                 response.say("Let me try that again.", voice='alice')
                 response.redirect('/webhook/voice', method='POST')
-                return str(response)
-        
+                return Response(str(response), mimetype='text/xml')
+
         @self.app.route('/webhook/status', methods=['POST'])
         def handle_status():
             try:
@@ -2210,7 +2388,7 @@ class TwilioAIReceptionist:
             except Exception as e:
                 self.logger.error(f"Error in status webhook: {e}")
                 return Response('', mimetype='text/plain')
-        
+
         @self.app.route('/static/audio/<filename>')
         def serve_audio(filename):
             try:
@@ -2225,7 +2403,7 @@ class TwilioAIReceptionist:
             except Exception as e:
                 self.logger.error(f"Error serving audio: {e}")
                 return "Error serving file", 500
-        
+
         @self.app.route('/webhook/followup', methods=['POST'])
         def handle_followup():
             try:
@@ -2255,15 +2433,15 @@ class TwilioAIReceptionist:
                     response.say(goodbye_text, voice='alice')
                     response.hangup()
                 
-                return str(response)
+                return Response(str(response), mimetype='text/xml')
                 
             except Exception as e:
                 self.logger.error(f"Error in followup webhook: {e}")
                 response = VoiceResponse()
                 response.say("Thank you for calling! Have a great day!", voice='alice')
                 response.hangup()
-                return str(response)
-        
+                return Response(str(response), mimetype='text/xml')
+
         @self.app.route('/webhook/final_check', methods=['POST'])
         def handle_final_check():
             try:
@@ -2298,23 +2476,106 @@ class TwilioAIReceptionist:
                     response.pause(length=0.5)
                     response.hangup()
                 
-                return str(response)
+                return Response(str(response), mimetype='text/xml')
                 
             except Exception as e:
                 self.logger.error(f"Error in final_check webhook: {e}")
                 response = VoiceResponse()
                 response.say("Thank you for calling! Have a great day!", voice='alice')
                 response.hangup()
-                return str(response)
-        
+                return Response(str(response), mimetype='text/xml')
+
+        # Add outbound call handling
+        @self.app.route('/webhook/outbound_handler', methods=['POST'])
+        def handle_outbound():
+            try:
+                call_sid = request.values.get('CallSid')
+                answered_by = request.values.get('AnsweredBy', 'human')
+                
+                response = VoiceResponse()
+                
+                if answered_by == 'machine_start':
+                    response.say("Hello, this is an automated message. Please hold for important information.", voice='alice')
+                    response.pause(length=2)
+                
+                # Initialize outbound session if not exists
+                if call_sid not in self.call_sessions:
+                    session = CallSession(call_sid=call_sid)
+                    session.state = 'outbound_active'
+                    self.call_sessions[call_sid] = session
+                
+                response.say("Hello! I'm calling on behalf of our customer. How can I help you today?", voice='alice')
+                
+                gather = response.gather(
+                    input='speech',
+                    action='/webhook/outbound_process',
+                    method='POST',
+                    speechTimeout=3,
+                    timeout=10,
+                    language='en-US'
+                )
+                
+                return Response(str(response), mimetype='text/xml')
+                
+            except Exception as e:
+                self.logger.error(f"Error in outbound handler: {e}")
+                response = VoiceResponse()
+                response.say("I apologize, but I'm having technical difficulties. Goodbye.", voice='alice')
+                response.hangup()
+                return Response(str(response), mimetype='text/xml')
+
+        @self.app.route('/webhook/outbound_process', methods=['POST'])
+        def handle_outbound_process():
+            try:
+                call_sid = request.values.get('CallSid')
+                speech_result = request.values.get('SpeechResult', '')
+                
+                response = VoiceResponse()
+                
+                if call_sid in self.call_sessions:
+                    session = self.call_sessions[call_sid]
+                    # Process the outbound call conversation
+                    response.say("Thank you for your time. Have a great day!", voice='alice')
+                else:
+                    response.say("Thank you for your time. Goodbye!", voice='alice')
+                
+                response.hangup()
+                return Response(str(response), mimetype='text/xml')
+                
+            except Exception as e:
+                self.logger.error(f"Error in outbound process: {e}")
+                response = VoiceResponse()
+                response.say("Thank you. Goodbye.", voice='alice')
+                response.hangup()
+                return Response(str(response), mimetype='text/xml')
+
+        @self.app.route('/webhook/outbound_status', methods=['POST'])
+        def handle_outbound_status():
+            try:
+                call_sid = request.values.get('CallSid')
+                call_status = request.values.get('CallStatus')
+                
+                self.logger.info(f"Outbound call status - CallSid: {call_sid}, Status: {call_status}")
+                
+                # Clean up outbound session
+                if call_status in ['completed', 'failed', 'busy', 'no-answer']:
+                    if call_sid in self.call_sessions:
+                        del self.call_sessions[call_sid]
+                
+                return Response('', mimetype='text/plain')
+                
+            except Exception as e:
+                self.logger.error(f"Error in outbound status: {e}")
+                return Response('', mimetype='text/plain')
+
         @self.app.route('/admin/appointments', methods=['GET'])
         def view_appointments():
-            return self.get_appointments_json()
-        
+            return Response(self.get_appointments_json(), mimetype='application/json')
+
         @self.app.route('/admin/stats', methods=['GET'])
         def view_stats():
-            return self.get_call_stats()
-        
+            return Response(self.get_call_stats(), mimetype='application/json')
+
         @self.app.route('/admin/performance', methods=['GET'])
         def view_performance():
             """Performance metrics endpoint"""
@@ -2324,14 +2585,16 @@ class TwilioAIReceptionist:
                 'elevenlabs': self.elevenlabs_circuit_breaker.get_state()
             }
             
-            return json.dumps({
+            performance_data = json.dumps({
                 'performance': stats,
                 'circuit_breakers': circuit_states,
                 'cache_stats': self.cache.cache_stats,
                 'active_sessions': len(self.call_sessions),
                 'caller_profiles': len(self.caller_db.profiles)
             }, indent=2)
-        
+            
+            return Response(performance_data, mimetype='application/json')
+
         @self.app.route('/admin/calendar', methods=['GET'])
         def view_calendar():
             """Debug route to check calendar availability"""
@@ -2380,7 +2643,7 @@ class TwilioAIReceptionist:
                 html += f"<p>{next_available[0]} at {next_available[1]}</p>"
             
             return html
-        
+
         @self.app.route('/test', methods=['GET'])
         def test():
             """Enhanced system status page with metrics"""
@@ -2444,7 +2707,6 @@ class TwilioAIReceptionist:
                 {'<li><a href="/admin/calendar">Calendar Debug</a></li>' if self.google_calendar else ''}
             </ul>
             """
-    
     def handle_incoming_call_enhanced(self):
         """Handle incoming calls with VIP recognition"""
         try:
