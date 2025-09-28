@@ -312,7 +312,7 @@ async function handleSignup(event) {
             password: passwordInput.value
         };
 
-        const response = await fetch('http://localhost:5000/register', {
+        const response = await fetch('http://localhost:5001/register', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -387,7 +387,7 @@ async function handleLogin(event) {
     loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
 
     try {
-        const response = await fetch('http://localhost:5000/login', {
+        const response = await fetch('http://localhost:5001/login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -473,6 +473,18 @@ function createMainInterface() {
                     </div>
                     <div id="searchResult" style="margin-top: 20px; display: none;"></div>
                 </section>
+                <section id="agent-section" class="card glow" style="margin-top: 20px;">
+                <h3>AI Agent Assistant</h3>
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                <input type="text" id="agentTaskInput" placeholder="What should the agent do? (e.g., Schedule appointment)" style="padding: 12px; border-radius: 8px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.3);">
+                <input type="tel" id="targetPhoneInput" placeholder="Target phone number (e.g., +1234567890)" style="padding: 12px; border-radius: 8px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.3);">
+                <button onclick="runAgentTask()" style="background: linear-gradient(45deg, #1a237e, #0d47a1); color: white; border: none; padding: 12px 24px; border-radius: 25px; cursor: pointer;">
+            Start AI Agent
+                    </button>
+                    </div>
+                <div id="agentResult" style="margin-top: 20px; display: none;"></div>
+                    </section>
+                
             </main>
 
             <footer>
@@ -584,7 +596,7 @@ function initializeSearch() {
         searchResult.innerHTML = '<p style="color: rgba(255, 255, 255, 0.7);">🔍 Searching...</p>';
         
         try {
-            const response = await fetch('http://localhost:5000/search', {
+            const response = await fetch('http://localhost:5001/search', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -678,7 +690,7 @@ function togglePassword(inputId) {
 // Backend health check
 async function checkBackendHealth() {
     try {
-        const response = await fetch('http://localhost:5000/health');
+        const response = await fetch('http://localhost:5001/health');
         if (response.ok) {
             console.log('✅ Backend is running');
             return true;
@@ -688,6 +700,76 @@ async function checkBackendHealth() {
         return false;
     }
 }
+// Add these functions at the END of auth-combined.js
+async function runAgentTask() {
+    const taskInput = document.getElementById('agentTaskInput');
+    const phoneInput = document.getElementById('targetPhoneInput');
+    const task = taskInput.value.trim();
+    const phone = phoneInput.value.trim();
+    
+    if (!task || !phone) {
+        alert('Please enter both task and phone number');
+        return;
+    }
+    
+    const agentResult = document.getElementById('agentResult');
+    agentResult.style.display = 'block';
+    agentResult.innerHTML = '<p style="color: white;">🤖 Agent initiating call...</p>';
+    
+    try {
+        const response = await fetch('http://localhost:5000/api/initiate_call', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+                query: task,
+                phone: phone,
+                user_id: currentUser ? currentUser.username : 'guest'
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            agentResult.innerHTML = `
+                <div style="background: rgba(76, 175, 80, 0.2); padding: 20px; border-radius: 15px; border-left: 4px solid #4caf50;">
+                    <h4 style="color: #4caf50;">✅ Agent Call Initiated!</h4>
+                    <p style="color: white;">Call SID: ${result.call_sid}</p>
+                    <p style="color: white;">The agent is now calling ${phone}</p>
+                    <button onclick="checkAgentStatus('${result.call_sid}')" style="margin-top: 10px; padding: 8px 16px; background: #4caf50; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        Check Status
+                    </button>
+                </div>
+            `;
+        } else {
+            agentResult.innerHTML = `
+                <div style="background: rgba(244, 67, 54, 0.2); padding: 20px; border-radius: 15px;">
+                    <p style="color: #f44336;">Error: ${result.error}</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        agentResult.innerHTML = `<p style="color: #f44336;">Error: ${error.message}</p>`;
+    }
+}
+
+async function checkAgentStatus(callSid) {
+    try {
+        const response = await fetch(`http://localhost:5001/api/call_status/${callSid}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`Call Status: ${data.state}\nTranscript: ${JSON.stringify(data.transcript)}`);
+        } else {
+            alert('Could not get call status');
+        }
+    } catch (error) {
+        alert('Error checking status: ' + error.message);
+    }
+}
+
+
 
 // Check backend on page load
 checkBackendHealth();
