@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Update the display with search results
         displayArea.innerHTML = `
-            <h3>� InfoBridge Search Results</h3>
+            <h3>🔍 InfoBridge Search Results</h3>
             <div class="search-query">
                 <strong>Your Question:</strong> "${query}"
             </div>
@@ -180,18 +180,28 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('InfoBridge input capture system loaded successfully! 🚀');
 });
 
-// Export functions for external use (if needed)
-const InfoBridge = {
-    getCurrentInput: () => document.querySelector('.circular-input')?.value || '',
-    setInput: (value) => {
-        const input = document.querySelector('.circular-input');
-        if (input) input.value = value;
-    },
-    clearInput: () => {
-        const input = document.querySelector('.circular-input');
-        if (input) {
-            input.value = '';
-            input.focus();
+// Smooth scrolling for navigation links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            target.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
         }
-    }
-};
+    });
+});
+
+// Add glow effect to cards on hover
+document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('mouseenter', function() {
+        this.classList.add('glow');
+    });
+    card.addEventListener('mouseleave', function() {
+        if (!this.classList.contains('glow')) {
+            this.classList.remove('glow');
+        }
+    });
+});
