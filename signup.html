@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up - InfoBridge</title>
+    <link rel="stylesheet" href="signup.css">
+    <link rel="stylesheet" href="InfoBridge.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="signup-container">
+        <!-- Header Section -->
+        <div class="header">
+            <img src="InfoBridgeAI JPG.png" alt="InfoBridge AI" class="logo">
+            <h1 id="headerTitle">InfoBridge</h1>
+            <p id="headerSubtitle">Create your account to access AI-powered information assistance</p>
+        </div>
+
+        <!-- Sign-Up Form -->
+        <div class="signup-form-container">
+            <form id="signupForm" class="signup-form">
+                <div class="form-group">
+                    <label for="username">
+                        <i class="fas fa-user"></i>
+                        Username
+                    </label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        name="username" 
+                        required 
+                        placeholder="Enter your username"
+                        minlength="3"
+                        maxlength="20"
+                    >
+                    <div class="error-message" id="usernameError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">
+                        <i class="fas fa-envelope"></i>
+                        Email Address
+                    </label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        required 
+                        placeholder="Enter your email"
+                    >
+                    <div class="error-message" id="emailError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">
+                        <i class="fas fa-lock"></i>
+                        Password
+                    </label>
+                    <div class="password-input-container">
+                        <input 
+                            type="password" 
+                            id="password" 
+                            name="password" 
+                            required 
+                            placeholder="Create a strong password"
+                            minlength="8"
+                        >
+                        <button type="button" class="toggle-password" onclick="togglePassword('password')">
+                            <i class="fas fa-eye" id="passwordEye"></i>
+                        </button>
+                    </div>
+                    <div class="password-strength" id="passwordStrength"></div>
+                    <div class="error-message" id="passwordError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="confirmPassword">
+                        <i class="fas fa-lock"></i>
+                        Confirm Password
+                    </label>
+                    <div class="password-input-container">
+                        <input 
+                            type="password" 
+                            id="confirmPassword" 
+                            name="confirmPassword" 
+                            required 
+                            placeholder="Confirm your password"
+                        >
+                        <button type="button" class="toggle-password" onclick="togglePassword('confirmPassword')">
+                            <i class="fas fa-eye" id="confirmPasswordEye"></i>
+                        </button>
+                    </div>
+                    <div class="error-message" id="confirmPasswordError"></div>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="agreeTerms" required>
+                        <span class="checkmark"></span>
+                        I agree to the <a href="#" class="terms-link">Terms of Service</a> and <a href="#" class="terms-link">Privacy Policy</a>
+                    </label>
+                    <div class="error-message" id="termsError"></div>
+                </div>
+
+                <button type="submit" class="signup-btn" id="signupBtn">
+                    <i class="fas fa-user-plus"></i>
+                    Create Account
+                </button>
+
+                <div class="signup-footer">
+                    <p>Already have an account? <button class="login-toggle-btn" onclick="toggleToLogin()">Sign In</button></p>
+                </div>
+            </form>
+
+            <!-- Login Form (Initially Hidden) -->
+            <form id="loginForm" class="signup-form" style="display: none;">
+                <div class="form-group">
+                    <label for="loginUsername">
+                        <i class="fas fa-user"></i>
+                        Username or Email
+                    </label>
+                    <input 
+                        type="text" 
+                        id="loginUsername" 
+                        name="loginUsername" 
+                        required 
+                        placeholder="Enter your username or email"
+                    >
+                    <div class="error-message" id="loginUsernameError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="loginPassword">
+                        <i class="fas fa-lock"></i>
+                        Password
+                    </label>
+                    <div class="password-input-container">
+                        <input 
+                            type="password" 
+                            id="loginPassword" 
+                            name="loginPassword" 
+                            required 
+                            placeholder="Enter your password"
+                        >
+                        <button type="button" class="toggle-password" onclick="togglePassword('loginPassword')">
+                            <i class="fas fa-eye" id="loginPasswordEye"></i>
+                        </button>
+                    </div>
+                    <div class="error-message" id="loginPasswordError"></div>
+                </div>
+
+                <button type="submit" class="signup-btn" id="loginBtn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Sign In to InfoBridge
+                </button>
+
+                <div class="signup-footer">
+                    <p>Don't have an account? <button class="login-toggle-btn" onclick="toggleToSignup()">Create Account</button></p>
+                </div>
+            </form>
+        </div>
+
+        <!-- Success/Error Messages -->
+        <div class="message-container" id="messageContainer">
+            <div class="success-message" id="successMessage"></div>
+            <div class="error-message-global" id="errorMessageGlobal"></div>
+        </div>
+    </div>
+
+    <script src="auth-combined.js"></script>
+</body>
+</html>

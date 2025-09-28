@@ -1,0 +1,26 @@
+{
+  "Arjun": {
+    "username": "Arjun",
+    "email": "arjunsherugar@gmail.com",
+    "password_hash": "$2b$12$SNWADRNy0Uqq1GdQrKPaRezP47igX0mtVWxZe9iifbv3MZxIAe1I2",
+    "created_at": "2025-09-27T12:43:50.645759",
+    "last_login": null,
+    "is_active": true
+  },
+  "Arjun22": {
+    "username": "Arjun22",
+    "email": "obeyel274@gmail.com",
+    "password_hash": "$2b$12$WDEk7KQuPfkerOhMRPFJJOZ5BCzshYm7ewL2vqwLJ/8W5uTxywuba",
+    "created_at": "2025-09-27T13:03:09.080038",
+    "last_login": null,
+    "is_active": true
+  },
+  "Ali_balls": {
+    "username": "Ali_balls",
+    "email": "alizane10@gmail.com",
+    "password_hash": "$2b$12$uBn3Cu8LtMsfRGk2eiR0EuCRu8iQw5o2pgF1vDGmPBZrbYiwmRPZO",
+    "created_at": "2025-09-28T00:38:24.953334",
+    "last_login": "2025-09-28T00:49:33.958507",
+    "is_active": true
+  }
+}

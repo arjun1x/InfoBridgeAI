@@ -17,22 +17,137 @@
     <main>
         <!-- Main Display -->
         <section id="main" class="card glow">
-            <h2>Welcome to InfoBridge</h2>
+            <h2 id="welcomeTitle">Welcome to InfoBridge</h2>
+            <p id="welcomeSubtitle" style="color: rgba(255, 255, 255, 0.8); margin-bottom: 20px; display: none;"></p>
             <div class="input-container">
-                <input type="text" class="circular-input" placeholder="Type your question here..." />
-                <button class="search-btn">🔍</button>
+                <input type="text" class="circular-input" placeholder="Type your question here..." id="searchInput" />
+                <button class="search-btn" id="searchBtn">🔍</button>
             </div>
+            <div id="searchResult" style="margin-top: 20px; display: none;"></div>
         </section>
     </main>
 
     <footer>
         <div class="footer-content">
-            <p>&copy; 2025 InfoBridge </p>
+            <p>&copy; 2025 InfoBridgeAI</p>
             <p>Built with passion for innovation</p>
         </div>
     </footer>
 
     <script>
+        // Check for new user and personalize welcome
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const isNewUser = urlParams.get('newUser');
+            const username = urlParams.get('username');
+            
+            const welcomeTitle = document.getElementById('welcomeTitle');
+            const welcomeSubtitle = document.getElementById('welcomeSubtitle');
+            
+            if (isNewUser && username) {
+                welcomeTitle.textContent = `Welcome to InfoBridge, ${username}!`;
+                welcomeSubtitle.textContent = 'Your account is ready. Ask me anything and I\'ll help you find the information you need.';
+                welcomeSubtitle.style.display = 'block';
+                
+                // Show a subtle animation for new users
+                welcomeTitle.style.animation = 'pulse 2s ease-in-out';
+                
+                // Clean up URL after 5 seconds
+                setTimeout(() => {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }, 5000);
+            }
+            
+            // Initialize search functionality
+            initializeSearch();
+        });
+
+        // Search functionality
+        function initializeSearch() {
+            const searchInput = document.getElementById('searchInput');
+            const searchBtn = document.getElementById('searchBtn');
+            const searchResult = document.getElementById('searchResult');
+            
+            // Search button click handler
+            searchBtn.addEventListener('click', performSearch);
+            
+            // Enter key handler
+            searchInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    performSearch();
+                }
+            });
+            
+            async function performSearch() {
+                const query = searchInput.value.trim();
+                
+                if (!query) {
+                    return;
+                }
+                
+                // Show loading state
+                searchBtn.innerHTML = '⏳';
+                searchBtn.disabled = true;
+                searchResult.style.display = 'block';
+                searchResult.innerHTML = '<p style="color: rgba(255, 255, 255, 0.7);">Searching...</p>';
+                
+                try {
+                    // Send search request to backend
+                    const response = await fetch('http://localhost:5000/search', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ query: query })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        // Display result
+                        searchResult.innerHTML = `
+                            <div style="background: rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 15px; border-left: 4px solid #64b5f6;">
+                                <h4 style="color: #64b5f6; margin-bottom: 10px;">Answer:</h4>
+                                <p style="color: white; line-height: 1.6;">${result.answer}</p>
+                                <small style="color: rgba(255, 255, 255, 0.5); margin-top: 10px; display: block;">
+                                    Source: ${result.source} | ${new Date(result.timestamp).toLocaleTimeString()}
+                                </small>
+                            </div>
+                        `;
+                    } else {
+                        searchResult.innerHTML = `
+                            <div style="background: rgba(244, 67, 54, 0.1); padding: 20px; border-radius: 15px; border-left: 4px solid #f44336;">
+                                <h4 style="color: #f44336; margin-bottom: 10px;">Error:</h4>
+                                <p style="color: white;">${result.error}</p>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    console.error('Search error:', error);
+                    searchResult.innerHTML = `
+                        <div style="background: rgba(244, 67, 54, 0.1); padding: 20px; border-radius: 15px; border-left: 4px solid #f44336;">
+                            <h4 style="color: #f44336; margin-bottom: 10px;">Connection Error:</h4>
+                            <p style="color: white;">Unable to connect to InfoBridge backend. Please make sure the server is running.</p>
+                        </div>
+                    `;
+                } finally {
+                    // Reset search button
+                    searchBtn.innerHTML = '🔍';
+                    searchBtn.disabled = false;
+                }
+            }
+        }
+
+        // Add pulse animation for new users
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes pulse {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.05); }
+            }
+        `;
+        document.head.appendChild(style);
+
         // Smooth scrolling for navigation links
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function (e) {

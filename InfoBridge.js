@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchButton = document.querySelector('.search-btn');
     
     // Function to capture and process the input
-    function captureUserInput() {
+    async function captureUserInput() {
         // Get the text from the input box
         const userInput = searchInput.value.trim();
         
@@ -20,16 +20,64 @@ document.addEventListener('DOMContentLoaded', function() {
         // Log the captured input to console (for testing)
         console.log('User typed:', userInput);
         
-        // Display what the user typed
-        displayCapturedInput(userInput);
+        // Show loading state
+        showLoadingState();
         
+        try {
+            // Send to Python backend for processing
+            const response = await searchWithBackend(userInput);
+            
+            if (response.success) {
+                displaySearchResult(userInput, response.answer, response.source);
+            } else {
+                displaySearchResult(userInput, 'Error: ' + response.error, 'Error');
+            }
+        } catch (error) {
+            console.error('Search error:', error);
+            displaySearchResult(userInput, 'Sorry, there was an error connecting to the backend. Please make sure the Python server is running.', 'Connection Error');
+        }
         
         // Clear the input box after capturing
         searchInput.value = '';
     }
     
-    // Function to display the captured input
-    function displayCapturedInput(input) {
+    // Function to send search query to Python backend
+    async function searchWithBackend(query) {
+        const response = await fetch('http://localhost:5000/search', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query: query })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        return await response.json();
+    }
+    
+    // Function to show loading state
+    function showLoadingState() {
+        let displayArea = document.querySelector('.captured-input-display');
+        
+        if (!displayArea) {
+            displayArea = document.createElement('div');
+            displayArea.className = 'captured-input-display card';
+            const mainSection = document.querySelector('#main');
+            mainSection.parentNode.insertBefore(displayArea, mainSection.nextSibling);
+        }
+        
+        displayArea.innerHTML = `
+            <h3>🔍 Searching...</h3>
+            <p>Please wait while I find information for you...</p>
+            <div class="loading-spinner">⏳</div>
+        `;
+    }
+    
+    // Function to display search results
+    function displaySearchResult(query, answer, source) {
         // Create or update a display area
         let displayArea = document.querySelector('.captured-input-display');
         
@@ -43,12 +91,19 @@ document.addEventListener('DOMContentLoaded', function() {
             mainSection.parentNode.insertBefore(displayArea, mainSection.nextSibling);
         }
         
-        // Update the display with captured input
+        // Update the display with search results
         displayArea.innerHTML = `
-            <h3>📝 Captured Input:</h3>
-            <p><strong>"${input}"</strong></p>
-            <p><small>Input captured at: ${new Date().toLocaleTimeString()}</small></p>
-            <button class="btn" onclick="clearDisplay()">Clear</button>
+            <h3>� InfoBridge Search Results</h3>
+            <div class="search-query">
+                <strong>Your Question:</strong> "${query}"
+            </div>
+            <div class="search-answer">
+                <strong>Answer:</strong> ${answer}
+            </div>
+            <div class="search-meta">
+                <small>Source: ${source} | ${new Date().toLocaleTimeString()}</small>
+            </div>
+            <button class="btn" onclick="clearDisplay()">🔄 New Search</button>
         `;
         
         // Add fade-in animation
