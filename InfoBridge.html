@@ -22,13 +22,21 @@
                 <input type="text" class="circular-input" placeholder="Type your question here..." />
                 <button class="search-btn">🔍</button>
             </div>
+
+            <!-- Buttons for navigation -->
+            <div class="button-container">
+                <button class="nav-btn" data-page="page1.html">Page 1</button>
+                <button class="nav-btn" data-page="page2.html">Page 2</button>
+                <button class="nav-btn" data-page="page3.html">Page 3</button>
+                <button class="nav-btn" data-page="page4.html">Page 4</button>
+            </div>
         </section>
     </main>
 
     <footer>
         <div class="footer-content">
-            <p>&copy; 2025 InfoBridge </p>
-            <p>Built with passion for innovation</p>
+            <p>&copy; Ali H., Arjun S., Barath B. </p>
+            <p>Easter Egg(SHELL HACKS ON TOP!)</p>
         </div>
     </footer>
 
@@ -56,6 +64,14 @@
                 if (!this.classList.contains('glow')) {
                     this.classList.remove('glow');
                 }
+            });
+        });
+
+        // Navigate to new pages when buttons are clicked
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const page = btn.getAttribute('data-page');
+                window.location.href = page; // opens the respective page
             });
         });
     </script>
